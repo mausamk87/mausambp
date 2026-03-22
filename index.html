@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Mausam — BP Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#060a12;--s1:#0d1220;--s2:#131b2e;--s3:#1a2540;--border:#1e2d45;--border2:#253554;--text:#dce8f5;--muted:#5a7090;--muted2:#8aa0be;--red:#f05252;--orange:#fb923c;--yellow:#fbbf24;--green:#34d399;--blue:#60a5fa;--cyan:#22d3ee;--purple:#a78bfa;--acc:#22d3ee}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;padding-bottom:80px}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:0.4}
+
+/* PIN SCREEN */
+#pinScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
+#pinScreen.hidden{display:none}
+.pin-logo{font-family:'DM Serif Display',serif;font-size:32px;margin-bottom:4px}
+.pin-logo em{font-style:italic;color:var(--cyan)}
+.pin-sub{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:40px}
+.pin-title{font-size:13px;color:var(--muted2);margin-bottom:20px;font-family:'Space Mono',monospace;letter-spacing:0.5px}
+.pin-dots{display:flex;gap:14px;margin-bottom:32px}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);background:transparent;transition:all 0.2s}
+.pin-dot.filled{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 10px rgba(34,211,238,0.4)}
+.pin-dot.error{background:var(--red);border-color:var(--red)}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:240px}
+.pin-btn{background:var(--s2);border:1px solid var(--border);border-radius:14px;height:64px;font-size:22px;font-weight:700;font-family:'DM Serif Display',serif;color:var(--text);cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center}
+.pin-btn:active{background:var(--s3);transform:scale(0.94);border-color:var(--cyan)}
+.pin-btn.del{font-size:18px;color:var(--muted2)}
+.pin-btn.empty{background:transparent;border:none;pointer-events:none}
+.pin-err{font-family:'Space Mono',monospace;font-size:11px;color:var(--red);margin-top:16px;opacity:0;transition:opacity 0.3s}
+.pin-err.show{opacity:1}
+
+/* HEADER */
+.hdr{padding:18px 16px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;background:rgba(6,10,18,0.95);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:space-between}
+.hdr-name{font-family:'DM Serif Display',serif;font-size:22px;letter-spacing:-0.3px;line-height:1}
+.hdr-name em{font-style:italic;color:var(--cyan)}
+.hdr-sub{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px;letter-spacing:0.5px}
+.sync-pill{display:flex;align-items:center;gap:5px;background:var(--s2);border:1px solid var(--border);border-radius:20px;padding:5px 10px;font-family:'Space Mono',monospace;font-size:9px;color:var(--muted)}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.sync-dot.on{background:var(--green);box-shadow:0 0 6px var(--green);animation:breathe 2s infinite}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* TABS */
+.tabs{display:flex;background:var(--bg);border-bottom:1px solid var(--border);position:sticky;top:61px;z-index:199;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:11px 16px;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all 0.2s;font-family:'Space Mono',monospace}
+.tab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+
+.view{display:none;padding:16px;position:relative;z-index:1}
+.view.active{display:block}
+
+/* CARD */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px;position:relative;overflow:hidden}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(34,211,238,0.15),transparent)}
+.card-title{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title::before{content:'';width:3px;height:12px;background:var(--cyan);border-radius:2px;display:inline-block}
+
+/* LIVE */
+.live-wrap{background:linear-gradient(135deg,#0a1628,#071020);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px;position:relative;overflow:hidden}
+.live-wrap::before{content:'';position:absolute;top:-60px;right:-60px;width:180px;height:180px;background:radial-gradient(circle,rgba(34,211,238,0.06),transparent 70%);pointer-events:none}
+.live-tag{font-family:'Space Mono',monospace;font-size:9px;color:var(--cyan);letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;gap:6px;margin-bottom:14px}
+.live-dot-anim{width:5px;height:5px;border-radius:50%;background:var(--cyan);animation:breathe 2s infinite}
+.arms-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.arm-panel{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:12px}
+.arm-lbl{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px}
+.arm-sys{font-family:'DM Serif Display',serif;font-size:36px;line-height:1;letter-spacing:-1px}
+.arm-dia{font-size:14px;color:var(--muted2);font-weight:500;margin-top:2px}
+.arm-pulse{font-family:'Space Mono',monospace;font-size:11px;margin-top:4px}
+.metrics-trio{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.metric{background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:10px;padding:10px 8px;text-align:center}
+.metric-v{font-family:'DM Serif Display',serif;font-size:24px;line-height:1}
+.metric-l{font-family:'Space Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:0.5px}
+.zone-bar{border-radius:10px;padding:9px 14px;text-align:center;font-weight:700;font-size:13px;letter-spacing:0.3px;margin-bottom:8px}
+.alert-txt{font-size:12px;color:var(--muted2);text-align:center;line-height:1.5}
+
+/* STATS */
+.stats-4{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.stat-box{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:14px}
+.stat-v{font-family:'DM Serif Display',serif;font-size:28px;line-height:1;margin-bottom:2px}
+.stat-l{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px}
+
+canvas{width:100%!important;display:block}
+.chart-legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+.leg{display:flex;align-items:center;gap:5px;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* LOG */
+.log-item{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;transition:border-color 0.2s}
+.log-date{font-family:'Space Mono',monospace;font-size:10px;color:var(--cyan);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.log-arms{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.log-arm-lbl{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:3px}
+.log-arm-sys{font-family:'DM Serif Display',serif;font-size:22px}
+.log-arm-pulse{font-family:'Space Mono',monospace;font-size:10px;margin-top:3px}
+.log-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.tag{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;font-family:'Space Mono',monospace}
+.log-notes{background:var(--s2);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--muted2);line-height:1.5;margin-bottom:8px;border-left:2px solid var(--border2)}
+.log-actions{display:flex;gap:8px;justify-content:flex-end}
+.icon-btn{background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;transition:all 0.2s;font-family:'Space Mono',monospace}
+.icon-btn.danger:hover{border-color:var(--red);color:var(--red)}
+
+/* FORM */
+.form-date{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'Space Mono',monospace;width:100%;outline:none;margin-bottom:14px;transition:border-color 0.2s}
+.form-date:focus{border-color:var(--cyan)}
+.sec-lbl{font-family:'Space Mono',monospace;font-size:10px;color:var(--cyan);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px}
+.fg input{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:13px 12px;color:var(--text);font-size:20px;font-weight:700;font-family:'Space Mono',monospace;width:100%;outline:none;transition:border-color 0.2s;-webkit-appearance:none}
+.fg input:focus{border-color:var(--cyan)}
+.fg input::placeholder{color:var(--border2);font-size:15px}
+.fg-full{margin-bottom:12px}
+.fg-full label{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px;display:block;margin-bottom:4px}
+.fg-full textarea{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;width:100%;outline:none;resize:vertical;min-height:70px;line-height:1.5;transition:border-color 0.2s}
+.fg-full textarea:focus{border-color:var(--cyan)}
+.fg-full textarea::placeholder{color:var(--border2)}
+.preview{background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:14px;margin:12px 0;display:none}
+.preview.show{display:block}
+.preview-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px}
+.preview-row:last-child{margin-bottom:0}
+.pr-key{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+.pr-val{font-weight:700}
+.save-btn{width:100%;padding:16px;background:var(--cyan);color:#030810;border:none;border-radius:12px;font-size:15px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;letter-spacing:0.3px;transition:all 0.2s;margin-top:4px}
+.save-btn:active{transform:scale(0.98);opacity:0.9}
+
+/* DATA BUTTONS */
+.data-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.data-btn{padding:14px 10px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;text-align:center;border:1px solid}
+.data-btn.export{background:rgba(34,211,238,0.1);color:var(--cyan);border-color:rgba(34,211,238,0.3)}
+.data-btn.excel{background:rgba(52,211,153,0.1);color:var(--green);border-color:rgba(52,211,153,0.3)}
+.data-btn.import{background:rgba(167,139,250,0.1);color:var(--purple);border-color:rgba(167,139,250,0.3)}
+.data-btn.danger{background:rgba(240,82,82,0.1);color:var(--red);border-color:rgba(240,82,82,0.3)}
+.data-btn:active{transform:scale(0.97)}
+
+.doc-notes-area{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;width:100%;outline:none;resize:vertical;min-height:120px;line-height:1.6;transition:border-color 0.2s}
+.doc-notes-area:focus{border-color:var(--cyan)}
+.save-notes-btn{margin-top:8px;padding:11px 20px;background:rgba(34,211,238,0.1);color:var(--cyan);border:1px solid rgba(34,211,238,0.3);border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Space Mono',monospace;transition:all 0.2s}
+.save-notes-btn:active{transform:scale(0.97)}
+
+.empty{text-align:center;padding:50px 20px}
+.empty-icon{font-size:44px;margin-bottom:14px}
+.empty-txt{font-size:14px;color:var(--muted);line-height:1.6}
+
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--s3);border:1px solid var(--border2);color:var(--text);padding:12px 22px;border-radius:100px;font-size:12px;font-family:'Space Mono',monospace;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);z-index:9999;white-space:nowrap;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.success{border-color:rgba(52,211,153,0.4);color:var(--green)}
+.toast.error{border-color:rgba(240,82,82,0.4);color:var(--red)}
+
+.c-red{color:var(--red)!important}.c-orange{color:var(--orange)!important}.c-yellow{color:var(--yellow)!important}.c-green{color:var(--green)!important}.c-cyan{color:var(--cyan)!important}.c-muted{color:var(--muted)!important}
+.bg-red{background:rgba(240,82,82,0.15);color:var(--red)}.bg-orange{background:rgba(251,146,60,0.15);color:var(--orange)}.bg-yellow{background:rgba(251,191,36,0.15);color:var(--yellow)}.bg-green{background:rgba(52,211,153,0.15);color:var(--green)}
+
+.info-box{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:11px;color:var(--muted2);line-height:1.7;margin-bottom:12px}
+.info-box strong{color:var(--text)}
+</style>
+</head>
+<body>
+
+<!-- ═══ PIN SCREEN ═══ -->
+<div id="pinScreen">
+  <div class="pin-logo">Mausam <em>BP</em></div>
+  <div class="pin-sub">POST AVR · TEVAR · EVAR</div>
+  <div class="pin-title">ENTER PIN TO CONTINUE</div>
+  <div class="pin-dots" id="pinDots">
+    <div class="pin-dot" id="pd0"></div>
+    <div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div>
+    <div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-grid">
+    <button class="pin-btn" onclick="pinPress('1')">1</button>
+    <button class="pin-btn" onclick="pinPress('2')">2</button>
+    <button class="pin-btn" onclick="pinPress('3')">3</button>
+    <button class="pin-btn" onclick="pinPress('4')">4</button>
+    <button class="pin-btn" onclick="pinPress('5')">5</button>
+    <button class="pin-btn" onclick="pinPress('6')">6</button>
+    <button class="pin-btn" onclick="pinPress('7')">7</button>
+    <button class="pin-btn" onclick="pinPress('8')">8</button>
+    <button class="pin-btn" onclick="pinPress('9')">9</button>
+    <button class="pin-btn empty"></button>
+    <button class="pin-btn" onclick="pinPress('0')">0</button>
+    <button class="pin-btn del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-err" id="pinErr">Incorrect PIN. Try again.</div>
+</div>
+
+<!-- ═══ MAIN APP ═══ -->
+<div id="appWrap" style="display:none">
+
+<div class="hdr">
+  <div>
+    <div class="hdr-name">Mausam <em>BP</em></div>
+    <div class="hdr-sub" id="hdrDate">POST AVR · TEVAR · EVAR</div>
+  </div>
+  <div class="sync-pill">
+    <div class="sync-dot" id="syncDot"></div>
+    <span id="syncTxt">offline</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('dash')">Dashboard</div>
+  <div class="tab" onclick="switchTab('add')">＋ Add</div>
+  <div class="tab" onclick="switchTab('log')">Log</div>
+  <div class="tab" onclick="switchTab('charts')">Charts</div>
+  <div class="tab" onclick="switchTab('notes')">Notes</div>
+  <div class="tab" onclick="switchTab('data')">Data</div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="view-dash" class="view active">
+  <div id="liveArea"></div>
+  <div class="stats-4" id="statsArea"></div>
+  <div class="card">
+    <div class="card-title">Systolic Trend</div>
+    <canvas id="miniChart" height="110"></canvas>
+    <div class="chart-legend">
+      <div class="leg"><div class="leg-dot" style="background:#f05252"></div>Right</div>
+      <div class="leg"><div class="leg-dot" style="background:#22d3ee"></div>Left</div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD -->
+<div id="view-add" class="view">
+  <div class="card">
+    <div class="card-title">New BP Reading</div>
+    <input type="date" class="form-date" id="inputDate">
+    <div style="margin-bottom:14px">
+      <div class="sec-lbl">🔴 Right Arm</div>
+      <div class="form-grid">
+        <div class="fg"><label>SYSTOLIC</label><input type="number" id="rSys" placeholder="160" inputmode="numeric" oninput="calcPreview()"></div>
+        <div class="fg"><label>DIASTOLIC</label><input type="number" id="rDia" placeholder="90" inputmode="numeric"></div>
+      </div>
+      <div class="fg" style="margin-top:10px"><label>PULSE (BPM)</label><input type="number" id="rPulse" placeholder="72" inputmode="numeric" style="width:100%" oninput="calcPreview()"></div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="sec-lbl">🔵 Left Arm</div>
+      <div class="form-grid">
+        <div class="fg"><label>SYSTOLIC</label><input type="number" id="lSys" placeholder="110" inputmode="numeric" oninput="calcPreview()"></div>
+        <div class="fg"><label>DIASTOLIC</label><input type="number" id="lDia" placeholder="70" inputmode="numeric"></div>
+      </div>
+      <div class="fg" style="margin-top:10px"><label>PULSE (BPM)</label><input type="number" id="lPulse" placeholder="70" inputmode="numeric" style="width:100%"></div>
+    </div>
+    <div class="fg-full">
+      <label>SYMPTOMS / NOTES (optional)</label>
+      <textarea id="inputSymptom" placeholder="e.g. Headache, dizziness, chest tightness, neend aana..."></textarea>
+    </div>
+    <div class="preview" id="previewBox">
+      <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--cyan);letter-spacing:1px;margin-bottom:10px">PREVIEW</div>
+      <div class="preview-row"><span class="pr-key">ΔSys (R−L)</span><span class="pr-val" id="pvDelta">—</span></div>
+      <div class="preview-row"><span class="pr-key">BP Zone</span><span class="pr-val" id="pvZone">—</span></div>
+      <div class="preview-row"><span class="pr-key">Pulse</span><span class="pr-val" id="pvPulse">—</span></div>
+      <div class="preview-row"><span class="pr-key">Action</span><span class="pr-val" id="pvAlert" style="font-size:11px;text-align:right;max-width:58%">—</span></div>
+    </div>
+    <button class="save-btn" onclick="saveReading()">SAVE READING</button>
+    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+      <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;text-align:center">SEND DAILY ALERT</div>
+      <a id="waSneha" href="https://wa.me/918554033303" target="_blank" style="display:block;background:#25D366;color:white;text-align:center;padding:12px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;margin-bottom:8px;font-family:'DM Sans',sans-serif">📱 Sneha ko bhejo</a>
+      <a id="waRitu" href="https://wa.me/918805314326" target="_blank" style="display:block;background:#25D366;color:white;text-align:center;padding:12px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;font-family:'DM Sans',sans-serif">📱 Ritu ko bhejo</a>
+    </div>
+  </div>
+</div>
+
+<!-- LOG -->
+<div id="view-log" class="view">
+  <div id="logList"></div>
+</div>
+
+<!-- CHARTS -->
+<div id="view-charts" class="view">
+  <div class="card">
+    <div class="card-title">Blood Pressure Trend</div>
+    <canvas id="bigChart" height="180"></canvas>
+    <div class="chart-legend" style="margin-top:10px">
+      <div class="leg"><div class="leg-dot" style="background:#f05252"></div>RSys</div>
+      <div class="leg"><div class="leg-dot" style="background:#22d3ee"></div>LSys</div>
+      <div class="leg"><div class="leg-dot" style="background:rgba(251,191,36,0.5)"></div>140 line</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">ΔSys — Inter-arm Difference</div>
+    <canvas id="deltaChart" height="130"></canvas>
+    <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px">≥60=🔴 · 40–59=⚠️ · &lt;40=✅</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Pulse Trend</div>
+    <canvas id="pulseChart" height="130"></canvas>
+    <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px">NORMAL: 60–100 BPM</div>
+  </div>
+</div>
+
+<!-- NOTES -->
+<div id="view-notes" class="view">
+  <div class="card">
+    <div class="card-title">Doctor Notes</div>
+    <textarea class="doc-notes-area" id="docNotes" placeholder="Dr. Anurag — Met XL 50 continue. Next visit 15-Mar. HbA1c test karwana hai..."></textarea>
+    <button class="save-notes-btn" onclick="saveDoctorNotes()">SAVE NOTES</button>
+  </div>
+  <div class="card">
+    <div class="card-title">Medications</div>
+    <textarea class="doc-notes-area" id="medNotes" placeholder="• Met XL 50 — 1 tablet morning&#10;• Warfarin — as per INR&#10;• Ecosprin — 1 tablet..."></textarea>
+    <button class="save-notes-btn" onclick="saveMedNotes()">SAVE MEDICATIONS</button>
+  </div>
+</div>
+
+<!-- DATA -->
+<div id="view-data" class="view">
+
+  <div class="card">
+    <div class="card-title">☁️ Firebase Sync</div>
+    <div id="fbStatusBox" class="info-box">🔄 Connecting to cloud...</div>
+    <div style="font-size:11px;color:var(--muted2);line-height:1.7">
+      Firebase connected — data <strong>automatically syncs</strong> across all devices.<br>
+      Koi bhi device pe URL open karo → same data milega.<br>
+      Internet nahi hai toh local save hoga, online hone pe auto-sync.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📤 Export / Import</div>
+    <div class="data-row">
+      <button class="data-btn export" onclick="exportJSON()">⬇ JSON Backup</button>
+      <button class="data-btn excel" onclick="exportExcel()">📊 Excel Export</button>
+    </div>
+    <div class="data-row">
+      <button class="data-btn import" onclick="document.getElementById('importFile').click()">⬆ Import JSON</button>
+      <button class="data-btn danger" onclick="clearAll()">🗑 Clear All</button>
+    </div>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+    <div class="info-box" style="margin-top:8px;margin-bottom:0">
+      <strong>JSON Backup</strong> — poora data file mein download<br>
+      <strong>Excel Export</strong> — doctor ko dikhane wali .xlsx file<br>
+      <strong>Import</strong> — backup se data restore karo
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 Statistics</div>
+    <div id="statsDetail" style="font-size:12px;line-height:2;color:var(--muted2)"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔐 PIN Settings</div>
+    <div class="info-box" style="margin-bottom:10px">Current PIN: <strong style="color:var(--cyan);font-family:'Space Mono',monospace" id="pinDisplay">••••</strong></div>
+    <div class="form-grid">
+      <div class="fg"><label>NEW PIN (4 digits)</label><input type="password" id="newPin" placeholder="1234" maxlength="4" inputmode="numeric" style="font-size:18px"></div>
+      <div class="fg"><label>CONFIRM PIN</label><input type="password" id="confirmPin" placeholder="1234" maxlength="4" inputmode="numeric" style="font-size:18px"></div>
+    </div>
+    <button class="save-notes-btn" onclick="changePin()">CHANGE PIN</button>
+  </div>
+</div>
+
+</div><!-- /appWrap -->
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+// ══════════════════════════════════════════
+// CONFIG — HARDCODED
+// ══════════════════════════════════════════
+const FB_URL = 'https://mausambp-default-rtdb.firebaseio.com';
+const FB_PATH = 'mausam_bp_data';
+const DEFAULT_PIN = '1234'; // Change this after first login!
+
+// ══════════════════════════════════════════
+// PIN SYSTEM
+// ══════════════════════════════════════════
+const LS_PIN = 'mausam_pin';
+let pinBuffer = '';
+let pinUnlocked = false;
+
+function getPin() { return localStorage.getItem(LS_PIN) || DEFAULT_PIN; }
+
+function pinPress(d) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  updatePinDots();
+  if (pinBuffer.length === 4) setTimeout(checkPin, 200);
+}
+
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0,-1);
+  updatePinDots();
+}
+
+function updatePinDots(err=false) {
+  for (let i=0;i<4;i++) {
+    const dot = document.getElementById('pd'+i);
+    dot.className = 'pin-dot' + (i<pinBuffer.length?' filled':'') + (err?' error':'');
+  }
+}
+
+function checkPin() {
+  if (pinBuffer === getPin()) {
+    pinUnlocked = true;
+    document.getElementById('pinScreen').classList.add('hidden');
+    document.getElementById('appWrap').style.display = 'block';
+    initApp();
+  } else {
+    updatePinDots(true);
+    document.getElementById('pinErr').classList.add('show');
+    setTimeout(()=>{
+      pinBuffer='';
+      updatePinDots();
+      document.getElementById('pinErr').classList.remove('show');
+    },1200);
+  }
+}
+
+function changePin() {
+  const np = document.getElementById('newPin').value;
+  const cp = document.getElementById('confirmPin').value;
+  if (np.length!==4||!/^\d{4}$/.test(np)) { toast('PIN must be exactly 4 digits','error'); return; }
+  if (np!==cp) { toast('PINs do not match','error'); return; }
+  localStorage.setItem(LS_PIN, np);
+  document.getElementById('newPin').value='';
+  document.getElementById('confirmPin').value='';
+  document.getElementById('pinDisplay').textContent = np[0]+'•••';
+  toast('✓ PIN changed!','success');
+}
+
+// ══════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════
+const LS_DATA  = 'mausam_bp_v3';
+const LS_NOTES = 'mausam_doc_notes';
+const LS_MEDS  = 'mausam_med_notes';
+
+const INITIAL = [
+  {id:'r1', date:'2026-01-23',rSys:170,rDia:100,lSys:null,lDia:null,rPulse:70,lPulse:null,symptoms:''},
+  {id:'r2', date:'2026-01-30',rSys:169,rDia:63, lSys:104, lDia:69,  rPulse:null,lPulse:null,symptoms:''},
+  {id:'r3', date:'2026-02-16',rSys:150,rDia:64, lSys:96,  lDia:56,  rPulse:null,lPulse:null,symptoms:''},
+  {id:'r4', date:'2026-02-19',rSys:137,rDia:58, lSys:101, lDia:63,  rPulse:63,  lPulse:null,symptoms:''},
+  {id:'r5', date:'2026-02-20',rSys:148,rDia:61, lSys:102, lDia:61,  rPulse:82,  lPulse:null,symptoms:''},
+  {id:'r6', date:'2026-02-21',rSys:162,rDia:62, lSys:100, lDia:64,  rPulse:74,  lPulse:null,symptoms:''},
+  {id:'r7', date:'2026-02-23',rSys:193,rDia:64, lSys:121, lDia:68,  rPulse:70,  lPulse:null,symptoms:''},
+  {id:'r8', date:'2026-02-25',rSys:161,rDia:63, lSys:86,  lDia:61,  rPulse:64,  lPulse:null,symptoms:''},
+  {id:'r9', date:'2026-02-26',rSys:165,rDia:61, lSys:109, lDia:58,  rPulse:70,  lPulse:null,symptoms:''},
+  {id:'r10',date:'2026-02-27',rSys:143,rDia:57, lSys:93,  lDia:43,  rPulse:87,  lPulse:null,symptoms:''},
+  {id:'r11',date:'2026-02-28',rSys:151,rDia:57, lSys:98,  lDia:58,  rPulse:72,  lPulse:null,symptoms:''},
+  {id:'r12',date:'2026-03-01',rSys:162,rDia:54, lSys:90,  lDia:57,  rPulse:156, lPulse:76,  symptoms:'Pulse 156 — abnormal, Dr. Anurag ko batana'},
+  {id:'r13',date:'2026-03-03',rSys:154,rDia:61, lSys:110, lDia:62,  rPulse:102, lPulse:71,  symptoms:''},
+  {id:'r14',date:'2026-03-04',rSys:159,rDia:55, lSys:100, lDia:59,  rPulse:153, lPulse:73,  symptoms:'Pulse 153 again — pattern concerning'},
+  {id:'r15',date:'2026-03-06',rSys:160,rDia:57, lSys:109, lDia:69,  rPulse:70,  lPulse:66,  symptoms:''},
+];
+
+let readings = [];
+let fbRef = null, fbConnected = false;
+
+function loadLocal() {
+  try {
+    const s = localStorage.getItem(LS_DATA);
+    readings = s ? JSON.parse(s) : [...INITIAL];
+  } catch(e) { readings = [...INITIAL]; }
+}
+
+function saveLocal() { localStorage.setItem(LS_DATA, JSON.stringify(readings)); }
+
+function uid() { return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+function sorted() { return [...readings].sort((a,b)=>a.date.localeCompare(b.date)); }
+
+// ══════════════════════════════════════════
+// FIREBASE — AUTO CONNECT
+// ══════════════════════════════════════════
+function initFirebase() {
+  try {
+    const app = firebase.initializeApp({databaseURL: FB_URL}, 'mausam');
+    const db  = firebase.database(app);
+    fbRef = db.ref(FB_PATH);
+
+    fbRef.once('value').then(snap => {
+      fbConnected = true;
+      setSyncStatus(true);
+
+      const remote = snap.val();
+      if (remote && remote.readings && remote.readings.length > readings.length) {
+        // Remote has more data — use it
+        readings = remote.readings;
+        saveLocal();
+        renderDash();
+        toast('✓ Cloud data loaded','success');
+      } else {
+        // Push local to remote
+        pushFB();
+      }
+
+      // Real-time listener
+      fbRef.on('value', snap2 => {
+        const d = snap2.val();
+        if (d && d.readings && JSON.stringify(d.readings) !== JSON.stringify(readings)) {
+          readings = d.readings;
+          saveLocal();
+          // Refresh current tab silently
+        }
+      });
+
+      document.getElementById('fbStatusBox').innerHTML =
+        '🟢 <strong style="color:var(--green)">Connected</strong> — auto-syncing to cloud.<br>Kisi bhi device pe <strong>mausambp.netlify.app</strong> kholo → same data.';
+
+    }).catch(()=>{
+      setSyncStatus(false);
+      document.getElementById('fbStatusBox').innerHTML =
+        '🔴 <strong style="color:var(--red)">Offline</strong> — data locally saved. Internet pe wapas aane pe auto-sync hoga.';
+    });
+  } catch(e) {
+    setSyncStatus(false);
+    console.log('Firebase error:', e);
+  }
+}
+
+function pushFB() {
+  if (!fbConnected || !fbRef) return;
+  fbRef.set({readings, lastUpdated: new Date().toISOString()}).catch(e=>console.log(e));
+}
+
+function setSyncStatus(on) {
+  document.getElementById('syncDot').className = 'sync-dot' + (on?' on':'');
+  document.getElementById('syncTxt').textContent = on ? 'live' : 'offline';
+}
+
+// ══════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════
+function zone(sys) {
+  if (!sys) return {label:'—',cls:'',color:'#5a7090'};
+  if (sys>=180) return {label:'VERY HIGH 🚨',cls:'bg-red',color:'#f05252'};
+  if (sys>=160) return {label:'ELEVATED 🔴',cls:'bg-orange',color:'#fb923c'};
+  if (sys>=140) return {label:'ABOVE TARGET 🟡',cls:'bg-yellow',color:'#fbbf24'};
+  if (sys>=130) return {label:'TARGET ✅',cls:'bg-green',color:'#34d399'};
+  return {label:'OPTIMAL ✅',cls:'bg-green',color:'#34d399'};
+}
+function alertMsg(sys, delta) {
+  if (!sys) return '—';
+  if (sys>=180) return '🚨 VERY HIGH — consult doctor now';
+  if (delta && delta>=60) return '⚠️ High inter-arm diff — contact doctor';
+  if (sys>=160) return '🔴 Monitor closely; consult doctor';
+  if (sys>=140) return '🟡 Above target — note symptoms';
+  return '✅ Continue meds — Good';
+}
+function sysColor(sys) {
+  if (!sys) return 'var(--muted)';
+  if (sys>=180) return '#f05252';
+  if (sys>=160) return '#fb923c';
+  if (sys>=140) return '#fbbf24';
+  return '#34d399';
+}
+function pulseColor(p) {
+  if (!p) return 'var(--muted)';
+  if (p>120) return '#f05252';
+  if (p>100) return '#fb923c';
+  return '#34d399';
+}
+function fmtDate(d) {
+  const dt = new Date(d+'T00:00:00');
+  return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
+function shortDate(d) {
+  const dt = new Date(d+'T00:00:00');
+  return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+}
+
+// ══════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════
+const TABS = ['dash','add','log','charts','notes','data'];
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',TABS[i]===name));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  if (name==='dash') renderDash();
+  if (name==='log') renderLog();
+  if (name==='charts') renderCharts();
+  if (name==='notes') loadNotes();
+  if (name==='data') renderDataStats();
+}
+
+// ══════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════
+let miniC;
+function renderDash() {
+  const s = sorted();
+  const last = s[s.length-1];
+  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  document.getElementById('hdrDate').textContent = today;
+
+  if (!last) {
+    document.getElementById('liveArea').innerHTML='<div class="empty"><div class="empty-icon">💉</div><div class="empty-txt">No readings yet.<br>Add your first BP reading.</div></div>';
+    document.getElementById('statsArea').innerHTML='';
+    return;
+  }
+
+  const delta = (last.rSys&&last.lSys) ? last.rSys-last.lSys : null;
+  const z = zone(last.rSys);
+  const al = alertMsg(last.rSys, delta);
+  const dc = sysColor(last.rSys);
+  const lc = sysColor(last.lSys);
+  const dColor = delta===null?'var(--muted)':delta>=60?'#f05252':delta>=40?'#fb923c':'#34d399';
+  const pc = pulseColor(last.rPulse);
+
+  document.getElementById('liveArea').innerHTML = `
+    <div class="live-wrap">
+      <div class="live-tag"><div class="live-dot-anim"></div>LATEST · ${fmtDate(last.date)}</div>
+      <div class="arms-grid">
+        <div class="arm-panel">
+          <div class="arm-lbl">RIGHT ARM</div>
+          <div class="arm-sys" style="color:${dc}">${last.rSys}</div>
+          <div class="arm-dia">/ ${last.rDia} mmHg</div>
+          ${last.rPulse?`<div class="arm-pulse" style="color:${pc}">♥ ${last.rPulse} bpm${last.rPulse>120?' 🚨':last.rPulse>100?' ⚠️':''}</div>`:''}
+        </div>
+        <div class="arm-panel">
+          <div class="arm-lbl">LEFT ARM</div>
+          <div class="arm-sys" style="color:${last.lSys?lc:'var(--muted)'}">${last.lSys||'—'}</div>
+          <div class="arm-dia">${last.lDia?'/ '+last.lDia+' mmHg':'—'}</div>
+          ${last.lPulse?`<div class="arm-pulse" style="color:${pulseColor(last.lPulse)}">♥ ${last.lPulse} bpm</div>`:''}
+        </div>
+      </div>
+      <div class="metrics-trio">
+        <div class="metric"><div class="metric-v" style="color:${dColor}">${delta!==null?delta:'—'}</div><div class="metric-l">ΔSys</div></div>
+        <div class="metric"><div class="metric-v" style="color:${dc}">${last.rSys}</div><div class="metric-l">RSys</div></div>
+        <div class="metric"><div class="metric-v" style="color:${pc}">${last.rPulse||'—'}</div><div class="metric-l">Pulse</div></div>
+      </div>
+      <div class="zone-bar ${z.cls}">${z.label}</div>
+      <div class="alert-txt">${al}</div>
+      ${last.symptoms?`<div style="margin-top:10px;background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--muted2);font-style:italic">💬 ${last.symptoms}</div>`:''}
+    </div>`;
+
+  const rSysArr = s.filter(r=>r.rSys).map(r=>r.rSys);
+  const deltaArr = s.filter(r=>r.rSys&&r.lSys).map(r=>r.rSys-r.lSys);
+  const avg = arr=>arr.length?Math.round(arr.reduce((a,b)=>a+b,0)/arr.length):null;
+  const avgSys = avg(rSysArr), avgDelta = avg(deltaArr);
+  const maxSys = rSysArr.length?Math.max(...rSysArr):null;
+
+  document.getElementById('statsArea').innerHTML = `
+    <div class="stat-box"><div class="stat-v c-cyan">${s.length}</div><div class="stat-l">Total Readings</div></div>
+    <div class="stat-box"><div class="stat-v" style="color:${sysColor(avgSys)}">${avgSys||'—'}</div><div class="stat-l">Avg RSys</div></div>
+    <div class="stat-box"><div class="stat-v" style="color:${avgDelta!=null?(avgDelta>=60?'#f05252':avgDelta>=40?'#fb923c':'#34d399'):'var(--muted)'}">${avgDelta!=null?avgDelta:'—'}</div><div class="stat-l">Avg ΔSys</div></div>
+    <div class="stat-box"><div class="stat-v" style="color:${sysColor(maxSys)};font-size:22px">${maxSys||'—'}</div><div class="stat-l">Max RSys</div></div>`;
+
+  const ctx = document.getElementById('miniChart').getContext('2d');
+  if (miniC) miniC.destroy();
+  miniC = new Chart(ctx,{type:'line',data:{labels:s.map(r=>shortDate(r.date)),datasets:[
+    {data:s.map(r=>r.rSys),borderColor:'#f05252',backgroundColor:'rgba(240,82,82,0.07)',tension:0.4,pointRadius:2,fill:true,borderWidth:2,spanGaps:true},
+    {data:s.map(r=>r.lSys),borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.04)',tension:0.4,pointRadius:2,fill:false,borderWidth:2,spanGaps:true}
+  ]},options:CO});
+}
+
+// ══════════════════════════════════════════
+// CHARTS
+// ══════════════════════════════════════════
+const CO={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#131b2e',borderColor:'#1e2d45',borderWidth:1,titleColor:'#22d3ee',bodyColor:'#dce8f5',titleFont:{family:'Space Mono',size:10},bodyFont:{family:'Space Mono',size:11}}},scales:{x:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#5a7090',font:{family:'Space Mono',size:8},maxRotation:45}},y:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#5a7090',font:{family:'Space Mono',size:9}}}}};
+
+let bigC,deltaC,pulseC;
+function renderCharts() {
+  const s=sorted(),labels=s.map(r=>shortDate(r.date));
+  const c1=document.getElementById('bigChart').getContext('2d');
+  if(bigC)bigC.destroy();
+  bigC=new Chart(c1,{type:'line',data:{labels,datasets:[
+    {data:s.map(r=>r.rSys),borderColor:'#f05252',backgroundColor:'rgba(240,82,82,0.07)',tension:0.4,pointRadius:4,pointBackgroundColor:s.map(r=>sysColor(r.rSys)),fill:true,borderWidth:2.5,spanGaps:true},
+    {data:s.map(r=>r.lSys),borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.04)',tension:0.4,pointRadius:4,fill:false,borderWidth:2.5,spanGaps:true},
+    {data:s.map(()=>140),borderColor:'rgba(251,191,36,0.3)',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false}
+  ]},options:CO});
+
+  const c2=document.getElementById('deltaChart').getContext('2d');
+  if(deltaC)deltaC.destroy();
+  const deltas=s.map(r=>r.rSys&&r.lSys?r.rSys-r.lSys:null);
+  deltaC=new Chart(c2,{type:'bar',data:{labels,datasets:[{data:deltas,backgroundColor:deltas.map(d=>!d?'#1e2d45':d>=60?'rgba(240,82,82,0.8)':d>=40?'rgba(251,146,60,0.8)':'rgba(52,211,153,0.8)'),borderRadius:5}]},options:CO});
+
+  const c3=document.getElementById('pulseChart').getContext('2d');
+  if(pulseC)pulseC.destroy();
+  pulseC=new Chart(c3,{type:'line',data:{labels,datasets:[{data:s.map(r=>r.rPulse),borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.08)',tension:0.4,pointRadius:5,pointBackgroundColor:s.map(r=>pulseColor(r.rPulse)),fill:true,borderWidth:2,spanGaps:true}]},options:{...CO,scales:{...CO.scales,y:{...CO.scales.y,suggestedMin:50,suggestedMax:180}}}});
+}
+
+// ══════════════════════════════════════════
+// LOG
+// ══════════════════════════════════════════
+function renderLog() {
+  const s=sorted().reverse(),el=document.getElementById('logList');
+  if(!s.length){el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No readings yet</div></div>';return;}
+  el.innerHTML=s.map(r=>{
+    const delta=r.rSys&&r.lSys?r.rSys-r.lSys:null;
+    const z=zone(r.rSys);
+    const dc=delta===null?'#5a7090':delta>=60?'#f05252':delta>=40?'#fb923c':'#34d399';
+    return `<div class="log-item">
+      <div class="log-date">
+        <span>📅 ${fmtDate(r.date)}</span>
+        <div style="display:flex;gap:5px">${delta!==null?`<span class="tag" style="background:${dc}22;color:${dc}">Δ${delta}</span>`:''}<span class="tag ${z.cls}" style="font-size:9px">${z.label}</span></div>
+      </div>
+      <div class="log-arms">
+        <div>
+          <div class="log-arm-lbl">RIGHT</div>
+          <div><span class="log-arm-sys" style="color:${sysColor(r.rSys)}">${r.rSys}</span><span style="color:var(--muted2);font-size:14px">/${r.rDia}</span></div>
+          ${r.rPulse?`<div class="log-arm-pulse" style="color:${pulseColor(r.rPulse)}">♥ ${r.rPulse}${r.rPulse>120?' 🚨':r.rPulse>100?' ⚠️':''}</div>`:''}
+        </div>
+        <div>
+          <div class="log-arm-lbl">LEFT</div>
+          <div><span class="log-arm-sys" style="color:${r.lSys?sysColor(r.lSys):'var(--muted)'}">${r.lSys||'—'}</span>${r.lDia?`<span style="color:var(--muted2);font-size:14px">/${r.lDia}</span>`:''}</div>
+          ${r.lPulse?`<div class="log-arm-pulse" style="color:${pulseColor(r.lPulse)}">♥ ${r.lPulse}</div>`:''}
+        </div>
+      </div>
+      ${r.symptoms?`<div class="log-notes">${r.symptoms}</div>`:''}
+      <div class="log-actions"><button class="icon-btn danger" onclick="deleteR('${r.id}')">🗑 Delete</button></div>
+    </div>`;
+  }).join('');
+}
+
+function deleteR(id) {
+  if(!confirm('Delete this reading?'))return;
+  readings=readings.filter(r=>r.id!==id);
+  saveLocal(); pushFB(); renderLog();
+  toast('Reading deleted','error');
+}
+
+// ══════════════════════════════════════════
+// ADD READING
+// ══════════════════════════════════════════
+function calcPreview() {
+  const rs=parseInt(document.getElementById('rSys').value);
+  const ls=parseInt(document.getElementById('lSys').value);
+  const rp=parseInt(document.getElementById('rPulse').value);
+  const box=document.getElementById('previewBox');
+  if(!rs){box.classList.remove('show');return;}
+  box.classList.add('show');
+  const delta=(rs&&ls)?rs-ls:null;
+  const z=zone(rs);
+  const dc=delta===null?'var(--muted)':delta>=60?'#f05252':delta>=40?'#fb923c':'#34d399';
+  document.getElementById('pvDelta').innerHTML=`<span style="color:${dc}">${delta!==null?delta:'—'}</span>`;
+  document.getElementById('pvZone').innerHTML=`<span style="color:${z.color}">${z.label}</span>`;
+  document.getElementById('pvPulse').innerHTML=rp?`<span style="color:${pulseColor(rp)}">${rp} bpm${rp>120?' 🚨':rp>100?' ⚠️':''}</span>`:'<span style="color:var(--muted)">—</span>';
+  document.getElementById('pvAlert').textContent=alertMsg(rs,delta||0);
+}
+
+function saveReading() {
+  const date=document.getElementById('inputDate').value;
+  const rSys=parseInt(document.getElementById('rSys').value);
+  const rDia=parseInt(document.getElementById('rDia').value);
+  const lSys=parseInt(document.getElementById('lSys').value)||null;
+  const lDia=parseInt(document.getElementById('lDia').value)||null;
+  const rPulse=parseInt(document.getElementById('rPulse').value)||null;
+  const lPulse=parseInt(document.getElementById('lPulse').value)||null;
+  const symptoms=document.getElementById('inputSymptom').value.trim();
+  if(!date||!rSys||!rDia){toast('Date + Right BP required!','error');return;}
+  readings.push({id:uid(),date,rSys,rDia,lSys,lDia,rPulse,lPulse,symptoms});
+  saveLocal(); pushFB();
+  ['rSys','rDia','lSys','lDia','rPulse','lPulse','inputSymptom'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('previewBox').classList.remove('show');
+  toast('✓ Reading saved & synced!','success');
+  var _d=(lSys&&rSys)?rSys-lSys:'';
+  var _m='BP Reading - Mausam Singh\n'+date+'\nRight: '+rSys+'/'+rDia;
+  if(lSys)_m+='\nLeft: '+lSys+'/'+lDia;
+  if(rPulse)_m+='\nPulse: '+rPulse+' bpm';
+  if(_d)_m+='\nDelta: '+_d;
+  _m+='\nDr. Anurag: 9922427815';
+  var _e=encodeURIComponent(_m);
+  document.getElementById('waSneha').href='https://wa.me/918554033303?text='+_e;
+  document.getElementById('waRitu').href='https://wa.me/918805314326?text='+_e;
+  setTimeout(()=>switchTab('dash'),700);
+}
+
+// ══════════════════════════════════════════
+// NOTES
+// ══════════════════════════════════════════
+function loadNotes(){
+  document.getElementById('docNotes').value=localStorage.getItem(LS_NOTES)||'';
+  document.getElementById('medNotes').value=localStorage.getItem(LS_MEDS)||'';
+}
+function saveDoctorNotes(){localStorage.setItem(LS_NOTES,document.getElementById('docNotes').value);toast('Doctor notes saved ✓','success');}
+function saveMedNotes(){localStorage.setItem(LS_MEDS,document.getElementById('medNotes').value);toast('Medications saved ✓','success');}
+
+// ══════════════════════════════════════════
+// DATA STATS
+// ══════════════════════════════════════════
+function renderDataStats() {
+  const s=sorted();
+  if(!s.length)return;
+  const rS=s.filter(r=>r.rSys).map(r=>r.rSys);
+  const dA=s.filter(r=>r.rSys&&r.lSys).map(r=>r.rSys-r.lSys);
+  const pA=s.filter(r=>r.rPulse).map(r=>r.rPulse);
+  const avg=arr=>arr.length?Math.round(arr.reduce((a,b)=>a+b,0)/arr.length):null;
+  const hp=s.filter(r=>r.rPulse>100).length;
+  document.getElementById('statsDetail').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+      <div style="color:var(--muted)">Total Readings</div><div style="font-weight:600">${s.length}</div>
+      <div style="color:var(--muted)">First</div><div style="font-weight:600">${shortDate(s[0].date)}</div>
+      <div style="color:var(--muted)">Last</div><div style="font-weight:600">${shortDate(s[s.length-1].date)}</div>
+      <div style="color:var(--muted)">Avg RSys</div><div style="color:${sysColor(avg(rS))};font-weight:700">${avg(rS)||'—'}</div>
+      <div style="color:var(--muted)">Max RSys</div><div style="color:#f05252;font-weight:700">${rS.length?Math.max(...rS):'—'}</div>
+      <div style="color:var(--muted)">Min RSys</div><div style="color:#34d399;font-weight:700">${rS.length?Math.min(...rS):'—'}</div>
+      <div style="color:var(--muted)">Avg ΔSys</div><div style="color:${avg(dA)>=60?'#f05252':avg(dA)>=40?'#fb923c':'#34d399'};font-weight:700">${avg(dA)||'—'}</div>
+      <div style="color:var(--muted)">Avg Pulse</div><div style="color:${pulseColor(avg(pA))};font-weight:700">${avg(pA)||'—'}</div>
+      <div style="color:var(--muted)">High Pulse (>100)</div><div style="color:${hp>0?'#f05252':'#34d399'};font-weight:700">${hp} readings</div>
+    </div>`;
+  document.getElementById('pinDisplay').textContent=getPin()[0]+'•••';
+}
+
+// ══════════════════════════════════════════
+// EXPORT JSON
+// ══════════════════════════════════════════
+function exportJSON() {
+  const data={version:3,exported:new Date().toISOString(),readings,docNotes:localStorage.getItem(LS_NOTES)||'',medNotes:localStorage.getItem(LS_MEDS)||''};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='mausam_bp_'+new Date().toISOString().slice(0,10)+'.json';a.click();
+  toast('✓ JSON exported!','success');
+}
+
+// ══════════════════════════════════════════
+// EXPORT EXCEL
+// ══════════════════════════════════════════
+function exportExcel() {
+  const s = sorted();
+  const wb = XLSX.utils.book_new();
+
+  // BP Log sheet
+  const bpRows = [
+    ['Date','RSys','RDia','LSys','LDia','Pulse(R)','ΔSys','BP Zone','Alert','Symptoms']
+  ];
+  s.forEach(r => {
+    const delta = r.rSys&&r.lSys ? r.rSys-r.lSys : '';
+    const z = r.rSys >= 180 ? 'Very High' : r.rSys>=160?'Elevated':r.rSys>=140?'Above Target':r.rSys>=130?'Target':'Optimal';
+    const al = alertMsg(r.rSys, delta);
+    bpRows.push([r.date,r.rSys,r.rDia,r.lSys||'',r.lDia||'',r.rPulse||'',delta,z,al,r.symptoms||'']);
+  });
+  const bpSheet = XLSX.utils.aoa_to_sheet(bpRows);
+  bpSheet['!cols'] = [{wch:12},{wch:7},{wch:7},{wch:7},{wch:7},{wch:9},{wch:7},{wch:18},{wch:38},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, bpSheet, 'BP Log');
+
+  // Summary sheet
+  const rS = s.filter(r=>r.rSys).map(r=>r.rSys);
+  const dA = s.filter(r=>r.rSys&&r.lSys).map(r=>r.rSys-r.lSys);
+  const avg = arr=>arr.length?Math.round(arr.reduce((a,b)=>a+b,0)/arr.length):'-';
+  const sumRows = [
+    ['MAUSAM SINGH — BP Summary'],
+    ['Post AVR + TEVAR + EVAR'],
+    ['Generated', new Date().toLocaleDateString('en-IN')],
+    [''],
+    ['Metric','Value'],
+    ['Total Readings', s.length],
+    ['Date Range', shortDate(s[0]?.date||'') + ' to ' + shortDate(s[s.length-1]?.date||'')],
+    ['Avg RSys', avg(rS)],
+    ['Max RSys', rS.length?Math.max(...rS):'-'],
+    ['Min RSys', rS.length?Math.min(...rS):'-'],
+    ['Avg ΔSys', avg(dA)],
+    ['High ΔSys (≥60)', dA.filter(d=>d>=60).length + ' readings'],
+    ['High Pulse (>100)', s.filter(r=>r.rPulse>100).length + ' readings'],
+    [''],
+    ['Doctor Notes', localStorage.getItem(LS_NOTES)||''],
+    ['Medications', localStorage.getItem(LS_MEDS)||''],
+  ];
+  const sumSheet = XLSX.utils.aoa_to_sheet(sumRows);
+  sumSheet['!cols'] = [{wch:22},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, sumSheet, 'Summary');
+
+  XLSX.writeFile(wb, 'Mausam_BP_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✓ Excel exported!','success');
+}
+
+// ══════════════════════════════════════════
+// IMPORT JSON
+// ══════════════════════════════════════════
+function importJSON(e) {
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try {
+      const data=JSON.parse(ev.target.result);
+      if(data.readings&&Array.isArray(data.readings)){
+        if(!confirm(`Import ${data.readings.length} readings? Current data will be replaced.`))return;
+        readings=data.readings;
+        if(data.docNotes)localStorage.setItem(LS_NOTES,data.docNotes);
+        if(data.medNotes)localStorage.setItem(LS_MEDS,data.medNotes);
+        saveLocal();pushFB();
+        toast(`✓ Imported ${readings.length} readings!`,'success');
+        switchTab('dash');
+      } else {toast('Invalid file format','error');}
+    } catch(err){toast('Import failed','error');}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+function clearAll() {
+  if(!confirm('DELETE ALL DATA? Cannot be undone!'))return;
+  if(!confirm('Really sure? All readings will be lost!'))return;
+  readings=[];saveLocal();pushFB();
+  toast('All data cleared','error');switchTab('dash');
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+let toastT;
+function toast(msg,type=''){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.className='toast show'+(type?' '+type:'');
+  clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+function initApp() {
+  loadLocal();
+  document.getElementById('inputDate').value=new Date().toISOString().split('T')[0];
+  loadNotes();
+  initFirebase();
+  renderDash();
+}
+
+// Start with PIN screen
+window.addEventListener('load', ()=>{
+  // Auto-unlock if already unlocked in this session
+  if (sessionStorage.getItem('pin_ok') === '1') {
+    document.getElementById('pinScreen').classList.add('hidden');
+    document.getElementById('appWrap').style.display='block';
+    initApp();
+  }
+});
+</script>
+</body>
+</html>
